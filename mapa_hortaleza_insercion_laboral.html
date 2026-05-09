@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mapa de Recursos para la Inserción Laboral – Distrito de Hortaleza</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f8f6f2; color: #222; }
+  header { background: #fff; border-bottom: 1px solid #ddd; padding: 14px 20px; }
+  header h1 { font-size: 16px; font-weight: 600; color: #3a2060; margin-bottom: 2px; }
+  header p  { font-size: 12px; color: #666; }
+  #map { width: 100%; height: calc(100vh - 190px); min-height: 420px; }
+  #legend-bar { background: #fff; border-top: 1px solid #ddd; padding: 10px 16px; }
+  #filter-label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 7px; }
+  #legend { display: flex; flex-wrap: wrap; gap: 7px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #444; cursor: pointer;
+    padding: 4px 9px; border-radius: 6px; border: 1px solid #ddd; background: #fff;
+    transition: background 0.15s; user-select: none; }
+  .leg-item:hover { background: #f0eef8; }
+  .leg-item.disabled { opacity: 0.32; }
+  .leg-icon { width: 17px; height: 17px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .popup-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; color: #1a1a1a; }
+  .popup-addr { font-size: 11px; color: #666; }
+  .popup-cat  { font-size: 10px; margin-top: 5px; font-weight: 600; }
+  .popup-note { font-size: 11px; color: #555; margin-top: 3px; font-style: italic; }
+  .ext-badge  { font-size: 10px; background: #f5e6c0; color: #7a5a07; padding: 1px 5px; border-radius: 3px; margin-left: 5px; }
+  .leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 2px 14px rgba(0,0,0,0.18) !important; }
+  .leaflet-popup-content { margin: 10px 14px !important; }
+  footer { background: #fff; border-top: 1px solid #ddd; padding: 6px 16px; font-size: 10px; color: #aaa; text-align: right; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mapa de Recursos para la Inserción Laboral – Distrito de Hortaleza (Madrid)</h1>
+  <p>TFG: Análisis de la promoción del empleo para perceptores del Ingreso Mínimo Vital · Aparatado 3.2 · Haz clic en cualquier marcador para ver la información. Usa la leyenda para filtrar por categoría.</p>
+</header>
+
+<div id="map"></div>
+
+<div id="legend-bar">
+  <div id="filter-label">Filtrar por categoría (clic para activar/desactivar)</div>
+  <div id="legend"></div>
+</div>
+
+<footer>Fuentes: Ayuntamiento de Madrid · Comunidad de Madrid · Entidades del Tercer Sector · Cartografía: OpenStreetMap / CARTO</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const categories = [
+  { id:"empleo_cm",   label:"Oficina de Empleo (Comunidad de Madrid)",            shape:"diamond", color:"#cc2222", fill:"rgba(204,34,34,0.12)",   stroke:"#cc2222", strokeW:2.5 },
+  { id:"agencia_emp", label:"Agencia para el Empleo (Ayuntamiento de Madrid)",     shape:"square",  color:"#1a8a45", fill:"rgba(26,138,69,0.12)",   stroke:"#1a8a45", strokeW:2.5 },
+  { id:"css",         label:"Centros de Servicios Sociales",                       shape:"square",  color:"#5a3080", fill:"rgba(90,48,128,0.12)",   stroke:"#5a3080", strokeW:2.5 },
+  { id:"otros_local", label:"Otros centros Adm. Local con proyectos de empleo",    shape:"square",  color:"#1a6bbf", fill:"rgba(26,107,191,0.12)",  stroke:"#1a6bbf", strokeW:2.5 },
+  { id:"insercion",   label:"Asociaciones apoyo inserción sociolaboral",           shape:"circle",  color:"#a08800", fill:"#f5d800",  stroke:"#a08800" },
+  { id:"discapacidad",label:"Asociaciones carácter sectorial — discapacidad",      shape:"circle",  color:"#904800", fill:"#e07800",  stroke:"#904800" },
+  { id:"comunitario", label:"Asociaciones de apoyo comunitario a las familias",    shape:"circle",  color:"#802000", fill:"#e04010",  stroke:"#802000" }
+];
+
+const resources = [
+  { name:"Oficina de Empleo Sanchinarro (SEPE / Comunidad de Madrid)", address:"Av. del Ingeniero Emilio Herrera, 23", lat:40.4924253, lng:-3.6526336, cat:"empleo_cm", note:"Referencia principal para perceptores del IMV en Hortaleza" },
+  { name:"Agencia para el Empleo – Oficina de Proximidad Barajas",     address:"Av. de Cantabria, 6, Barajas",         lat:40.4545757, lng:-3.5874091, cat:"agencia_emp", note:"Atiende a residentes de Hortaleza", external:true },
+  { name:"Agencia para el Empleo – Unidad Móvil (CSS El Querol)",      address:"Calle Vélez Rubio, 1 (frente al CSS El Querol)", lat:40.47730, lng:-3.66280, cat:"agencia_emp", note:"Paradas programadas. Consultar calendario en web del Ayuntamiento" },
+  { name:"CSS El Querol",         address:"Calle Vélez Rubio, 1",           lat:40.47672, lng:-3.66370, cat:"css" },
+  { name:"CSS Concepción Arenal", address:"Calle Javier del Quinto, 12",    lat:40.4664947, lng:-3.6421472, cat:"css" },
+  { name:"ASPA 2 (Oficina Hortaleza)", address:"Calle Mar de Aral, 13 (posterior)", lat:40.4730, lng:-3.6380, cat:"otros_local", note:"Atención social y proyectos de empleo" },
+  { name:"Espacio de Igualdad Carme Chacón", address:"Calle de Matapozuelos, 2", lat:40.4610446, lng:-3.6498972, cat:"otros_local", note:"Proyectos de empleo para mujeres" },
+  { name:"Cáritas Vicaría I",     address:"Calle Santa Hortensia, 5 (Chamartín — coordina parroquias de Hortaleza)", lat:40.4457134, lng:-3.6699814, cat:"insercion", external:true },
+  { name:"Cruz Roja – Asamblea Norte (Hortaleza)", address:"Calle José Álvarez de Toledo, 4", lat:40.4617827, lng:-3.6290123, cat:"insercion" },
+  { name:"Asociación El Olivar",  address:"Calle del Mar Amarillo, 21",      lat:40.47520, lng:-3.64170, cat:"insercion" },
+  { name:"Fundación Aprocor",     address:"Calle de Esteban Palacios, 12",   lat:40.4578601, lng:-3.6221509, cat:"discapacidad" },
+  { name:"ADISLI",                address:"Calle de Dionisio Inca Yupanqui, 63", lat:40.4617723, lng:-3.6264363, cat:"discapacidad" },
+  { name:"APILAD",                address:"Calle de Chaparral, 17",           lat:40.4708791, lng:-3.6352651, cat:"discapacidad" },
+  { name:"Asociación La Torre de Hortaleza", address:"Calle de Abizanda, 8", lat:40.477408, lng:-3.649940, cat:"comunitario" },
+  { name:"Asociación Alacrán 1997", address:"Calle del Mar Amarillo, 21",    lat:40.47390, lng:-3.64030, cat:"comunitario" }
+];
+
+function makeSvgIcon(cat) {
+  const c = categories.find(x => x.id === cat);
+  const s = 24;
+  let inner = '';
+  if (c.shape === 'diamond') {
+    inner = `<polygon points="${s/2},2 ${s-2},${s/2} ${s/2},${s-2} 2,${s/2}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="${c.strokeW||2}"/>`;
+  } else if (c.shape === 'square') {
+    inner = `<rect x="2" y="2" width="${s-4}" height="${s-4}" rx="3" fill="${c.fill}" stroke="${c.stroke}" stroke-width="${c.strokeW||2}"/>`;
+  } else {
+    inner = `<circle cx="${s/2}" cy="${s/2}" r="${s/2-2}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${inner}</svg>`;
+  return L.divIcon({ html: svg, className:'', iconSize:[s,s], iconAnchor:[s/2,s/2], popupAnchor:[0,-(s/2+4)] });
+}
+
+function makeLegSvg(cat) {
+  const c = categories.find(x => x.id === cat);
+  const s = 15;
+  let inner = '';
+  if (c.shape === 'diamond') {
+    inner = `<polygon points="${s/2},1 ${s-1},${s/2} ${s/2},${s-1} 1,${s/2}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.8"/>`;
+  } else if (c.shape === 'square') {
+    inner = `<rect x="1" y="1" width="${s-2}" height="${s-2}" rx="2" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.8"/>`;
+  } else {
+    inner = `<circle cx="${s/2}" cy="${s/2}" r="${s/2-1}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">${inner}</svg>`;
+}
+
+const hortalezaBoundary = [
+  [40.506,-3.680],[40.506,-3.600],[40.498,-3.582],[40.490,-3.575],
+  [40.475,-3.572],[40.458,-3.578],[40.445,-3.592],[40.440,-3.610],
+  [40.440,-3.635],[40.450,-3.660],[40.458,-3.675],[40.468,-3.685],
+  [40.480,-3.690],[40.495,-3.688],[40.506,-3.680]
+];
+
+const barrios = [
+  { name:"Palomas",          lat:40.497, lng:-3.666 },
+  { name:"Piovera",          lat:40.497, lng:-3.620 },
+  { name:"Canillas",         lat:40.477, lng:-3.653 },
+  { name:"Pinar del Rey",    lat:40.468, lng:-3.674 },
+  { name:"Apóstol Santiago", lat:40.459, lng:-3.648 },
+  { name:"Valdefuentes",     lat:40.487, lng:-3.605 },
+  { name:"Hortaleza",        lat:40.462, lng:-3.627 }
+];
+
+const map = L.map('map', { center:[40.474,-3.642], zoom:13 });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+  maxZoom:18
+}).addTo(map);
+
+L.polygon(hortalezaBoundary, {
+  color:'#5a3080', weight:2, opacity:0.5,
+  fill:true, fillColor:'#8b6ab5', fillOpacity:0.07, dashArray:'6 4'
+}).addTo(map).bindPopup('<b style="color:#3a2060">Distrito de Hortaleza</b>');
+
+barrios.forEach(b => {
+  L.marker([b.lat,b.lng], {
+    icon: L.divIcon({
+      html:`<span style="font-size:10px;font-weight:700;color:#5a3080;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap;background:rgba(255,255,255,0.8);padding:1px 4px;border-radius:3px">${b.name}</span>`,
+      className:'', iconAnchor:[40,8]
+    }), interactive:false
+  }).addTo(map);
+});
+
+const markersByCategory = {};
+categories.forEach(c => { markersByCategory[c.id] = []; });
+
+resources.forEach(r => {
+  const cat = categories.find(c => c.id === r.cat);
+  const marker = L.marker([r.lat,r.lng], { icon: makeSvgIcon(r.cat) });
+  const ext = r.external ? `<span class="ext-badge">Externa</span>` : '';
+  const note = r.note ? `<div class="popup-note">${r.note}</div>` : '';
+  marker.bindPopup(`
+    <div class="popup-title">${r.name}${ext}</div>
+    <div class="popup-addr">${r.address}</div>
+    ${note}
+    <div class="popup-cat" style="color:${cat.color}">${cat.label}</div>
+  `, { maxWidth:280 });
+  marker.addTo(map);
+  markersByCategory[r.cat].push(marker);
+});
+
+const legendEl = document.getElementById('legend');
+const active = new Set(categories.map(c => c.id));
+categories.forEach(cat => {
+  const item = document.createElement('div');
+  item.className = 'leg-item';
+  item.innerHTML = `<span class="leg-icon">${makeLegSvg(cat.id)}</span><span>${cat.label}</span>`;
+  item.addEventListener('click', () => {
+    if (active.has(cat.id)) {
+      active.delete(cat.id);
+      item.classList.add('disabled');
+      markersByCategory[cat.id].forEach(m => m.setOpacity(0).closePopup());
+    } else {
+      active.add(cat.id);
+      item.classList.remove('disabled');
+      markersByCategory[cat.id].forEach(m => m.setOpacity(1));
+    }
+  });
+  legendEl.appendChild(item);
+});
+</script>
+</body>
+</html>
